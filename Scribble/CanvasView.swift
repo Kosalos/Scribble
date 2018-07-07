@@ -1,93 +1,95 @@
-/*
-* Copyright (c) 2015 Razeware LLC
-*
-* Permission is hereby granted, free of charge, to any person obtaining a copy
-* of this software and associated documentation files (the "Software"), to deal
-* in the Software without restriction, including without limitation the rights
-* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-* copies of the Software, and to permit persons to whom the Software is
-* furnished to do so, subject to the following conditions:
-*
-* The above copyright notice and this permission notice shall be included in
-* all copies or substantial portions of the Software.
-*
-* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-* THE SOFTWARE.
-*/
-
 import UIKit
 
-let π = CGFloat(M_PI)
-
 class CanvasView: UIImageView {
-  
-  // Parameters
-  private let DefaultLineWidth:CGFloat = 6
-  
-  private var drawColor: UIColor = UIColor.redColor()
-  
-  override func touchesMoved(touches: Set<UITouch>, withEvent event: UIEvent?) {
-    guard let touch = touches.first else { return }
+    private let defaultLineWidth:CGFloat = 16
+    private var drawColor: UIColor = UIColor.blue
+    var penAngle:CGFloat = 0
+    var vector:CGVector = CGVector()
+    var style:Int = 0
     
-    UIGraphicsBeginImageContextWithOptions(bounds.size, false, 0.0)
-    let context = UIGraphicsGetCurrentContext()
+    func changeStyle(_ s:Int) { style = s }
     
-    // Draw previous image into context
-    self.image?.drawInRect(bounds)
-    
-    drawStroke(context, touch: touch)
-    
-    // Update image
-    self.image = UIGraphicsGetImageFromCurrentImageContext()
-    UIGraphicsEndImageContext()
-  }
-  
-  private func drawStroke(context: CGContext?, touch: UITouch) {
-    let previousLocation = touch.previousLocationInView(self)
-    let location = touch.locationInView(self)
-    
-    // Calculate line width for drawing stroke
-    let lineWidth = lineWidthForDrawing(context, touch: touch)
-
-    // Set color
-    drawColor.setStroke()
-
-    // Configure line
-    CGContextSetLineWidth(context, lineWidth)
-    CGContextSetLineCap(context, .Round)
-
-    
-    // Set up the points
-    CGContextMoveToPoint(context, previousLocation.x, previousLocation.y)
-    CGContextAddLineToPoint(context, location.x, location.y)
-    // Draw the stroke
-    CGContextStrokePath(context)
-    
-  }
-  
-  private func lineWidthForDrawing(context: CGContext?, touch: UITouch) -> CGFloat {
-
-    var lineWidth:CGFloat
-    lineWidth = DefaultLineWidth
-    
-    return lineWidth
-  }
-  
-  func clearCanvas(animated animated: Bool) {
-    if animated {
-      UIView.animateWithDuration(0.5, animations: {
-        self.alpha = 0
-        }, completion: { finished in
-          self.alpha = 1
-          self.image = nil
-      })
-    } else {
-      self.image = nil
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        for t in touches {
+            vector = t.azimuthUnitVector(in:nil)
+            
+            if vector.dx == 0 && vector.dy == 0 {   // Ruban:  added this so it works (badly) with just finger swipes
+                let pt = t.location(in: self)
+                vector.dx = pt.x
+                vector.dy = pt.y
+            }
+       }
     }
-  }
+    
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let t = touches.first else { return }
+        
+        UIGraphicsBeginImageContextWithOptions(bounds.size, false, 0.0)
+        let context = UIGraphicsGetCurrentContext()
+
+        image?.draw(in: bounds)
+        
+        penAngle = t.azimuthAngle(in: nil)
+        vector = t.azimuthUnitVector(in:nil)
+        
+        if vector.dx == 0 && vector.dy == 0 {   // Ruban:  added this so it works (badly) with just finger swipes
+            let pt = t.location(in: self)
+            vector.dx = pt.x
+            vector.dy = pt.y
+        }
+
+        drawStroke(context: context, touch: t)
+
+        image = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+    }
+    
+    private func lineWidthForDrawing(context: CGContext?, touch: UITouch) -> CGFloat {
+        let maxW:Float = 100
+        let fdx = fabs(Float(vector.dx))
+        var w = 1 + logf(3 * fdx) * 60
+        if w < 1 { w = 1 }
+        if w > maxW { w = maxW }
+        return CGFloat(w)
+    }
+    
+    private func drawStroke(context: CGContext?, touch: UITouch) {
+        let previousLocation = touch.previousLocation(in: self)
+        let location = touch.location(in: self)
+        
+        let lineWidth = lineWidthForDrawing(context: context, touch: touch)
+
+        var x = fabs(vector.dx)
+        if x > 1 { x = 1 }
+        
+        switch style {
+        case 0,1 : drawColor = UIColor(hue:CGFloat( Float(1 - x)), saturation: 1.0, brightness: 1.0, alpha: fabs(vector.dy))
+        default :  drawColor = UIColor(red:x, green:x, blue:x,  alpha: fabs(vector.dy))
+        }
+        
+        drawColor.setStroke()
+        
+        context!.setLineWidth(lineWidth)
+        context!.setLineCap(.round)
+        
+        context?.move(to:previousLocation)
+        context?.addLine(to:location)
+        context!.strokePath()
+    }
+    
+    func clearCanvas() {
+        image = nil
+        
+        UIGraphicsBeginImageContextWithOptions(bounds.size, false, 0.0)
+        let context = UIGraphicsGetCurrentContext()
+        
+        switch style {
+        case 1,3 : UIColor.white.set()
+        default : UIColor.black.set()
+        }
+        
+        context!.fill(self.bounds)
+        image = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+    }
 }
